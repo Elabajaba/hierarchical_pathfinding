@@ -280,6 +280,7 @@ impl<N: Neighborhood + Sync> PathCache<N> {
                 chunks
             }
         };
+        re_trace!("fix timer", timer);
 
         let mut cache = PathCache {
             width,
@@ -920,6 +921,7 @@ impl<N: Neighborhood + Sync> PathCache<N> {
         )
     }
 
+    #[profiling::function]
     fn tiles_changed_internal<F1, F2>(
         &mut self,
         tiles: &[Point],
@@ -1158,6 +1160,7 @@ impl<N: Neighborhood + Sync> PathCache<N> {
                 re_trace!("update edges", timer);
             }
         }
+        re_trace!("fix timer", timer);
 
         // re-establish cross-chunk connections
         self.connect_nodes(Some(changed_nodes));
@@ -1215,18 +1218,18 @@ impl<N: Neighborhood + Sync> PathCache<N> {
     }
 
     /// Prints all Nodes
-    #[allow(dead_code)]
-    fn print_nodes(&self) {
-        for node in self.inspect_nodes() {
-            print!("{} at {:?}: ", node.id(), node.pos());
+    // #[allow(dead_code)]
+    // fn print_nodes(&self) {
+    //     for node in self.inspect_nodes() {
+    //         print!("{:?} at {:?}: ", node.id(), node.pos());
 
-            for (neighbor, cost) in node.connected() {
-                print!("{:?}({}), ", neighbor.pos(), cost);
-            }
+    //         for (neighbor, cost) in node.connected() {
+    //             print!("{:?}({}), ", neighbor.pos(), cost);
+    //         }
 
-            println!();
-        }
-    }
+    //         println!();
+    //     }
+    // }
 
     fn get_chunk_pos(&self, point: Point) -> Point {
         let size = self.config.chunk_size;
@@ -1460,9 +1463,9 @@ impl<'a, N: Neighborhood> NodeInspector<'a, N> {
     /// The internal unique ID
     ///
     /// IDs are unique at any point in time, but may be reused if Nodes are deleted.
-    pub fn id(&self) -> NodeID {
-        self.node.id
-    }
+    // pub fn id(&self) -> NodeID {
+    //     self.node.
+    // }
 
     /// Provides an iterator over all connected Nodes with the Cost of the Path to that Node
     pub fn connected(&'a self) -> impl Iterator<Item = (NodeInspector<'a, N>, Cost)> + 'a {

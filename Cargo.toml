@@ -20,7 +20,9 @@ exclude = [
 [dependencies]
 hashbrown = "0.11"
 log = { version = "0.4", optional = true }   # Feature used for measuring internal timings. Recommended to leave this off unless working on improvements to hierarchical_pathfinding.
+profiling = "1.0.3"
 rayon = { version = "1.5", optional = true }  # don't set this directly, use feature `parallel` instead.
+slotmap = "1.0.5"
 
 [dev-dependencies]
 criterion = "0.3"
