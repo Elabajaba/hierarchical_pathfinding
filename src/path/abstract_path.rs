@@ -72,7 +72,7 @@ impl<N: Neighborhood> AbstractPath<N> {
                 )
             });
 
-            self.path[self.current_index.0] = PathSegment::Known(path);
+            self.path[self.current_index.0] = PathSegment::Known(path.into());
             current = &self.path[self.current_index.0];
 
             self.current_index.1 = 1; // paths include start and end, but we are already at start
@@ -85,7 +85,7 @@ impl<N: Neighborhood> AbstractPath<N> {
             }
         };
 
-        let ret = Some(path[self.current_index.1]);
+        let ret = Some(path.get(self.current_index.1));
         self.current_index.1 += 1;
         if self.current_index.1 >= path.len() {
             self.current_index.0 += 1;
@@ -127,7 +127,7 @@ impl<N: Neighborhood> AbstractPath<N> {
         AbstractPath {
             total_cost: path.cost(),
             total_length: path.len() - 1,
-            path: vec![PathSegment::Known(path)],
+            path: vec![PathSegment::Known(path.into())],
             ..AbstractPath::new(neighborhood, end)
         }
     }
@@ -156,7 +156,7 @@ impl<N: Neighborhood> AbstractPath<N> {
         self.total_cost += path.cost();
         self.total_length += path.len() - 1;
         self.end = path[path.len() - 1];
-        self.path.push(PathSegment::Known(path));
+        self.path.push(PathSegment::Known(path.into()));
         self
     }
 

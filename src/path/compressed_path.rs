@@ -70,10 +70,11 @@ impl CompressedPath {
     }
 
     fn decompress_path(&self) -> Vec<Point> {
+        use byteorder::{ByteOrder, LittleEndian};
+        
         let bytes =
             lz4_flex::decompress_size_prepended(&self.path).expect("Failed to decompress path.");
 
-        use byteorder::{ByteOrder, LittleEndian};
         let chunk_size = std::mem::size_of::<usize>();
 
         let mut ret = Vec::new();
@@ -86,7 +87,6 @@ impl CompressedPath {
             ret.push((x, y));
         }
 
-
         ret
     }
 }
@@ -94,6 +94,7 @@ impl CompressedPath {
 impl From<Path<Point>> for CompressedPath {
     fn from(path: Path<Point>) -> CompressedPath {
         let compressed_path = lz4_flex::compress_prepend_size(&path_to_bytes(&path.path));
+
         assert_eq!(path.len(), path.path.len());
         CompressedPath {
             path: compressed_path.into(),
