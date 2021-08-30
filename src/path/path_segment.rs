@@ -1,9 +1,9 @@
-use super::{Cost, Path};
+use super::{CompressedPath, Cost, Path};
 use crate::Point;
 
 #[derive(Clone, Debug)]
 pub enum PathSegment {
-    Known(Path<Point>),
+    Known(CompressedPath),
     Unknown {
         start: Point,
         end: Point,
@@ -17,7 +17,7 @@ use self::PathSegment::*;
 impl PathSegment {
     pub fn new(path: Path<Point>, known: bool) -> PathSegment {
         if known {
-            Known(path)
+            Known(path.into())
         } else {
             Unknown {
                 start: path[0],
@@ -44,14 +44,15 @@ impl PathSegment {
 
     pub fn start(&self) -> Point {
         match *self {
-            Known(ref path) => path[0],
+            // Known(ref path) => path.start,
+            Known(ref path) => path.start,
             Unknown { start, .. } => start,
         }
     }
 
     pub fn end(&self) -> Point {
         match *self {
-            Known(ref path) => path[path.len() - 1],
+            Known(ref path) => path.end,
             Unknown { end, .. } => end,
         }
     }

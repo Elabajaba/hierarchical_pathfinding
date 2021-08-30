@@ -4,9 +4,9 @@ use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Path<P> {
-    path: Arc<[P]>,
+    pub(crate) path: Arc<[P]>,
     cost: Cost,
-    is_reversed: bool,
+    pub(crate) is_reversed: bool,
 }
 
 #[allow(dead_code)]
