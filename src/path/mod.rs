@@ -8,3 +8,6 @@ mod path_segment;
 pub use path_segment::PathSegment;
 
 pub type Cost = usize;
+
+mod path_storage;
+pub use path_storage::PathStorageWrapper;

@@ -47,6 +47,7 @@ pub struct PathCache<N: Neighborhood> {
     chunks: Vec<Chunk>,
     num_chunks: (usize, usize),
     nodes: NodeList,
+    paths: PathStorageWrapper,
     neighborhood: N,
     config: PathCacheConfig,
 }
