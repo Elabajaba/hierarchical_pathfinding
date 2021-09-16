@@ -1,5 +1,5 @@
 use super::{Node, NodeID, NodeIDMap, NodeIDSet};
-use crate::{path::PathSegment, Point, PointMap};
+use crate::{Point, PointMap};
 
 #[derive(Clone, Debug)]
 pub struct NodeList {
@@ -40,26 +40,12 @@ impl NodeList {
         id
     }
 
-    pub fn add_edge(&mut self, src: NodeID, target: NodeID, path: PathSegment) {
-        let src_cost = self[src].walk_cost;
-
-        let target_node = &mut self[target];
-
-        let target_cost = target_node.walk_cost;
-
-        let other_path = path.reversed(src_cost, target_cost);
-        target_node.edges.insert(src, other_path);
-
-        let src_node = &mut self[src];
-        src_node.edges.insert(target, path);
-    }
-
     #[track_caller]
     pub fn remove_node(&mut self, id: NodeID) {
         let node = self.nodes[id as usize].take().unwrap();
-        for (other_id, _) in node.edges {
-            self[other_id].edges.remove(&id);
-        }
+        // for (other_id, _) in node.edges {
+        //     self[other_id].edges.remove(&id);
+        // }
         self.pos_map.remove(&node.pos);
         self.next_id = self.next_id.min(id as usize);
     }
@@ -100,14 +86,14 @@ impl NodeList {
             ret.insert(new);
         }
 
-        for old_node in other.nodes.into_iter().flatten() {
-            let mut new_node = &mut self[map[&old_node.id]];
-            new_node.edges = old_node
-                .edges
-                .into_iter()
-                .map(|(other_id, path)| (map[&other_id], path))
-                .collect();
-        }
+        // for old_node in other.nodes.into_iter().flatten() {
+        //     let mut new_node = &mut self[map[&old_node.id]];
+        //     new_node.edges = old_node
+        //         .edges
+        //         .into_iter()
+        //         .map(|(other_id, path)| (map[&other_id], path))
+        //         .collect();
+        // }
 
         ret
     }
@@ -128,36 +114,36 @@ impl IndexMut<NodeID> for NodeList {
     }
 }
 
-#[test]
-fn absorb() {
-    let mut nodes = NodeList::new();
-    nodes.add_node((0, 0), 0);
-    nodes.add_node((1, 1), 1);
-    nodes.add_node((2, 2), 2);
-    nodes.add_edge(
-        0,
-        1,
-        PathSegment::new(super::Path::from_slice(&[], 0), true),
-    );
-    nodes.add_edge(
-        2,
-        0,
-        PathSegment::new(super::Path::from_slice(&[], 2), true),
-    );
+// #[test]
+// fn absorb() {
+//     let mut nodes = NodeList::new();
+//     nodes.add_node((0, 0), 0);
+//     nodes.add_node((1, 1), 1);
+//     nodes.add_node((2, 2), 2);
+//     nodes.add_edge(
+//         0,
+//         1,
+//         PathSegment::new(super::Path::from_slice(&[], 0), true),
+//     );
+//     nodes.add_edge(
+//         2,
+//         0,
+//         PathSegment::new(super::Path::from_slice(&[], 2), true),
+//     );
 
-    let mut new_nodes = NodeList::new();
-    new_nodes.add_node((10, 10), 10);
-    new_nodes.add_node((11, 11), 11);
-    new_nodes.add_edge(
-        0,
-        1,
-        PathSegment::new(super::Path::from_slice(&[], 10), true),
-    );
+//     let mut new_nodes = NodeList::new();
+//     new_nodes.add_node((10, 10), 10);
+//     new_nodes.add_node((11, 11), 11);
+//     new_nodes.add_edge(
+//         0,
+//         1,
+//         PathSegment::new(super::Path::from_slice(&[], 10), true),
+//     );
 
-    nodes.absorb(new_nodes);
+//     nodes.absorb(new_nodes);
 
-    assert_eq!(nodes.nodes.len(), 5);
-    assert_eq!(nodes.nodes[3].as_ref().unwrap().pos, (10, 10));
-    assert_eq!(nodes.nodes[4].as_ref().unwrap().pos, (11, 11));
-    assert_eq!(nodes.nodes[3].as_ref().unwrap().edges[&4].cost(), 10);
-}
+//     assert_eq!(nodes.nodes.len(), 5);
+//     assert_eq!(nodes.nodes[3].as_ref().unwrap().pos, (10, 10));
+//     assert_eq!(nodes.nodes[4].as_ref().unwrap().pos, (11, 11));
+//     assert_eq!(nodes.nodes[3].as_ref().unwrap().edges[&4].cost(), 10);
+// }

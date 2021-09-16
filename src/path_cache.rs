@@ -1,7 +1,7 @@
 use crate::{
     graph::{self, Node, NodeList},
     neighbors::Neighborhood,
-    path::{AbstractPath, Cost, Path, PathSegment},
+    path::{AbstractPath, Path, PathSegment, PathStorageWrapper},
     *,
 };
 
@@ -47,7 +47,8 @@ pub struct PathCache<N: Neighborhood> {
     chunks: Vec<Chunk>,
     num_chunks: (usize, usize),
     nodes: NodeList,
-    paths: PathStorageWrapper,
+    /// asdf
+    pub paths: PathStorageWrapper,
     neighborhood: N,
     config: PathCacheConfig,
 }
@@ -192,6 +193,7 @@ impl<N: Neighborhood + Sync> PathCache<N> {
         };
 
         let mut nodes = NodeList::new();
+        let mut path_storage = PathStorageWrapper::new();
 
         // create chunks
         let chunks = match get_cost {
@@ -211,7 +213,7 @@ impl<N: Neighborhood + Sync> PathCache<N> {
                             config.chunk_size
                         };
 
-                        chunks.push(Chunk::new(
+                        let chunk = Chunk::new(
                             (x * config.chunk_size, y * config.chunk_size),
                             (w, h),
                             (width, height),
@@ -219,7 +221,21 @@ impl<N: Neighborhood + Sync> PathCache<N> {
                             &neighborhood,
                             &mut nodes,
                             config,
-                        ));
+                            &mut path_storage,
+                        );
+
+                        chunks.push(chunk);
+
+                        // chunks.push(Chunk::new(
+                        //     (x * config.chunk_size, y * config.chunk_size),
+                        //     (w, h),
+                        //     (width, height),
+                        //     &mut get_cost,
+                        //     &neighborhood,
+                        //     &mut nodes,
+                        //     config,
+                        //     &mut path_storage,
+                        // ));
                     }
                 }
 
@@ -228,57 +244,59 @@ impl<N: Neighborhood + Sync> PathCache<N> {
                 chunks
             }
             #[cfg(feature = "parallel")]
-            CostFnWrapper::Parallel(get_cost) => {
-                use rayon::prelude::*;
+            CostFnWrapper::Parallel(_get_cost) => {
+                unimplemented!()
+                // use rayon::prelude::*;
 
-                let (mut chunks, node_lists): (Vec<_>, Vec<_>) = (0..num_chunks_h * num_chunks_w)
-                    .into_par_iter()
-                    .map(|index| {
-                        let x = index % num_chunks_w;
-                        let y = index / num_chunks_w;
+                // let (mut chunks, node_lists): (Vec<_>, Vec<_>) = (0..num_chunks_h * num_chunks_w)
+                //     .into_par_iter()
+                //     .map(|index| {
+                //         let x = index % num_chunks_w;
+                //         let y = index / num_chunks_w;
 
-                        let w = if x == num_chunks_w - 1 {
-                            last_width
-                        } else {
-                            config.chunk_size
-                        };
+                //         let w = if x == num_chunks_w - 1 {
+                //             last_width
+                //         } else {
+                //             config.chunk_size
+                //         };
 
-                        let h = if y == num_chunks_h - 1 {
-                            last_height
-                        } else {
-                            config.chunk_size
-                        };
+                //         let h = if y == num_chunks_h - 1 {
+                //             last_height
+                //         } else {
+                //             config.chunk_size
+                //         };
 
-                        let mut node_list = NodeList::new();
+                //         let mut node_list = NodeList::new();
 
-                        let chunk = Chunk::new(
-                            (x * config.chunk_size, y * config.chunk_size),
-                            (w, h),
-                            (width, height),
-                            &get_cost,
-                            &neighborhood,
-                            &mut node_list,
-                            config,
-                        );
+                //         let chunk = Chunk::new(
+                //             (x * config.chunk_size, y * config.chunk_size),
+                //             (w, h),
+                //             (width, height),
+                //             &get_cost,
+                //             &neighborhood,
+                //             &mut node_list,
+                //             config,
+                //             &mut path_storage,
+                //         );
 
-                        (chunk, node_list)
-                    })
-                    .collect();
+                //         (chunk, node_list)
+                //     })
+                //     .collect();
 
-                re_trace!("create raw chunks", timer);
+                // re_trace!("create raw chunks", timer);
 
-                chunks
-                    .iter_mut()
-                    .zip(node_lists)
-                    .map(|(mut chunk, new_nodes)| {
-                        chunk.nodes = nodes.absorb(new_nodes);
-                        chunk
-                    })
-                    .to_vec();
+                // chunks
+                //     .iter_mut()
+                //     .zip(node_lists)
+                //     .map(|(mut chunk, new_nodes)| {
+                //         chunk.nodes = nodes.absorb(new_nodes);
+                //         chunk
+                //     })
+                //     .to_vec();
 
-                re_trace!("absorb nodes", timer);
+                // re_trace!("absorb nodes", timer);
 
-                chunks
+                // chunks
             }
         };
 
@@ -290,6 +308,7 @@ impl<N: Neighborhood + Sync> PathCache<N> {
             nodes,
             neighborhood,
             config,
+            paths: path_storage,
         };
 
         // connect neighboring Nodes across Chunk borders
@@ -497,6 +516,7 @@ impl<N: Neighborhood + Sync> PathCache<N> {
             goal_id,
             &neighborhood,
             size_hint as usize,
+            &self.paths,
         )?;
 
         re_trace!("graph::a_star_search", timer);
@@ -826,6 +846,7 @@ impl<N: Neighborhood + Sync> PathCache<N> {
             &goal_ids,
             only_closest_goal,
             size_hint as usize,
+            &self.paths,
         );
 
         self.resolve_paths(start, start_path, &goal_data, &paths, get_cost)
@@ -1016,6 +1037,8 @@ impl<N: Neighborhood + Sync> PathCache<N> {
             let chunk = &mut self.chunks[chunk_index];
 
             for id in removed {
+                let pos = self.nodes[id].pos;
+                self.paths.remove_all_paths_containing_node(pos);
                 chunk.nodes.remove(&id);
                 self.nodes.remove_node(id);
             }
@@ -1029,8 +1052,12 @@ impl<N: Neighborhood + Sync> PathCache<N> {
         for cp in dirty.keys() {
             let chunk_index = self.get_chunk_index(*cp);
             let chunk = &self.chunks[chunk_index];
+            // for id in chunk.nodes.iter() {
+            //     self.nodes[*id].edges.clear();
+            // }
             for id in chunk.nodes.iter() {
-                self.nodes[*id].edges.clear();
+                let pos = self.nodes[*id].pos;
+                self.paths.remove_all_paths_containing_node(pos);
             }
         }
 
@@ -1082,6 +1109,7 @@ impl<N: Neighborhood + Sync> PathCache<N> {
                         &mut get_cost,
                         &self.neighborhood,
                         &mut self.nodes,
+                        &mut self.paths,
                         &self.config,
                     );
                 } else {
@@ -1111,6 +1139,7 @@ impl<N: Neighborhood + Sync> PathCache<N> {
                         &mut get_cost,
                         &self.neighborhood,
                         &mut self.nodes,
+                        &mut self.paths,
                         &self.config,
                     );
                 }
@@ -1146,8 +1175,9 @@ impl<N: Neighborhood + Sync> PathCache<N> {
 
                 re_trace!("get paths", timer);
 
-                for (id, other_id, path) in paths.into_iter().flatten() {
-                    self.nodes.add_edge(id, other_id, path);
+                for (_id, _other_id, path) in paths.into_iter().flatten() {
+                    self.paths.insert(path.into());
+                    // self.nodes.add_edge(id, other_id, path);
                 }
 
                 for chunk_index in dirty_indices.iter() {
@@ -1215,19 +1245,19 @@ impl<N: Neighborhood + Sync> PathCache<N> {
         CacheInspector::new(self)
     }
 
-    /// Prints all Nodes
-    #[allow(dead_code)]
-    fn print_nodes(&self) {
-        for node in self.inspect_nodes() {
-            print!("{} at {:?}: ", node.id(), node.pos());
+    // /// Prints all Nodes
+    // #[allow(dead_code)]
+    // fn print_nodes(&self) {
+    //     for node in self.inspect_nodes() {
+    //         print!("{} at {:?}: ", node.id(), node.pos());
 
-            for (neighbor, cost) in node.connected() {
-                print!("{:?}({}), ", neighbor.pos(), cost);
-            }
+    //         for (neighbor, cost) in node.connected() {
+    //             print!("{:?}({}), ", neighbor.pos(), cost);
+    //         }
 
-            println!();
-        }
-    }
+    //         println!();
+    //     }
+    // }
 
     fn get_chunk_pos(&self, point: Point) -> Point {
         let size = self.config.chunk_size;
@@ -1351,7 +1381,16 @@ impl<N: Neighborhood + Sync> PathCache<N> {
                     // len() - 2 because skip(1) already removes one
                     continue;
                 }
-                final_path.add_path_segment(self.nodes[*a].edges[&b].clone());
+                // final_path.add_path_segment(self.nodes[*a].edges[&b].clone());
+                // a and b are NodeIDs
+                let start_pos = self.nodes[*a].pos;
+                let end_pos = self.nodes[*b].pos;
+                let (key, is_rev) = self.paths.get_key(start_pos, end_pos);
+                let temp_path = self.paths.get_path(key, is_rev);
+                let temp_cost = self.paths.get_cost(&key, &is_rev);
+                let thing: Path<Point> = Path::from_slice(&temp_path, temp_cost);
+
+                final_path.add_path_segment(PathSegment::Known(thing));
             }
 
             if skip_last {
@@ -1380,15 +1419,18 @@ impl<N: Neighborhood + Sync> PathCache<N> {
             target.clear();
             self.neighborhood.get_all_neighbors(pos, &mut target);
             for &other_pos in target.iter() {
-                if let Some(other_id) = self.node_at(other_pos) {
-                    self.nodes.add_edge(
-                        id,
-                        other_id,
-                        PathSegment::new(
-                            Path::from_slice(&[pos, other_pos], cost),
-                            self.config.cache_paths,
-                        ),
-                    );
+                if other_pos > pos {
+                    if let Some(other_id) = self.node_at(other_pos) {
+                        self.paths.insert(Path::from_slice(&[pos, other_pos], cost));
+                        // self.nodes.add_edge(
+                        //     id,
+                        //     other_id,
+                        //     PathSegment::new(
+                        //         Path::from_slice(&[pos, other_pos], cost),
+                        //         self.config.cache_paths,
+                        //     ),
+                        // );
+                    }
                 }
             }
         }
@@ -1465,13 +1507,13 @@ impl<'a, N: Neighborhood> NodeInspector<'a, N> {
         self.node.id
     }
 
-    /// Provides an iterator over all connected Nodes with the Cost of the Path to that Node
-    pub fn connected(&'a self) -> impl Iterator<Item = (NodeInspector<'a, N>, Cost)> + 'a {
-        self.node
-            .edges
-            .iter()
-            .map(move |(id, path)| (NodeInspector::new(self.src, *id), path.cost()))
-    }
+    // /// Provides an iterator over all connected Nodes with the Cost of the Path to that Node
+    // pub fn connected(&'a self) -> impl Iterator<Item = (NodeInspector<'a, N>, Cost)> + 'a {
+    //     self.node
+    //         .edges
+    //         .iter()
+    //         .map(move |(id, path)| (NodeInspector::new(self.src, *id), path.cost()))
+    // }
 }
 
 #[cfg(test)]

@@ -1,5 +1,6 @@
 use super::*;
 use crate::neighbors::Neighborhood;
+use crate::path::PathStorageWrapper;
 
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
@@ -10,6 +11,7 @@ pub fn a_star_search<N: Neighborhood>(
     goal: NodeID,
     neighborhood: &N,
     size_hint: usize,
+    paths: &PathStorageWrapper,
 ) -> Option<Path<NodeID>> {
     if start == goal {
         return Some(Path::from_slice(&[start, start], 0));
@@ -30,9 +32,13 @@ pub fn a_star_search<N: Neighborhood>(
         }
 
         let current = &nodes[current_id];
+        let current_edges = paths.get_edges(current.pos);
 
-        for (&other_id, path) in current.edges.iter() {
-            let other_cost = current_cost + path.cost();
+        for (key, is_rev) in current_edges.iter() {
+            let other_cost = current_cost + paths.get_cost(key, is_rev);
+            let other_id = nodes
+                .id_at(paths.get_end(key, *is_rev))
+                .expect("Error: No node at the end of the path.");
             let other = &nodes[other_id];
 
             let mut needs_visit = true;

@@ -1,7 +1,7 @@
 use crate::{
     graph::*,
     neighbors::Neighborhood,
-    path::{Path, PathSegment},
+    path::{Path, PathStorageWrapper},
     *,
 };
 
@@ -22,6 +22,7 @@ impl Chunk {
         neighborhood: &N,
         all_nodes: &mut NodeList,
         config: PathCacheConfig,
+        path_storage: &mut PathStorageWrapper,
     ) -> Chunk {
         let mut chunk = Chunk {
             pos,
@@ -42,6 +43,7 @@ impl Chunk {
             }
             chunk.sides[dir.num()] = true;
 
+            // Candidates for nodes are created here.
             chunk.calculate_side_nodes(dir, total_size, &mut get_cost, config, &mut candidates);
         }
 
@@ -50,7 +52,16 @@ impl Chunk {
             .map(|p| all_nodes.add_node(p, get_cost(p) as usize))
             .to_vec();
 
-        chunk.add_nodes(&nodes, &mut get_cost, neighborhood, all_nodes, &config);
+        chunk.add_nodes(
+            &nodes,
+            &mut get_cost,
+            neighborhood,
+            all_nodes,
+            path_storage,
+            &config,
+        );
+
+        // println!("lengths: {:?}", lens);
 
         chunk
     }
@@ -177,14 +188,17 @@ impl Chunk {
         mut get_cost: impl FnMut(Point) -> isize,
         neighborhood: &N,
         all_nodes: &mut NodeList,
+        path_storage: &mut PathStorageWrapper,
         config: &PathCacheConfig,
     ) {
         // first to_visit, then the rest => slicing works the same on both lists
-        let points = to_visit
+        let mut points = to_visit
             .iter()
             .chain(self.nodes.iter())
             .map(|id| all_nodes[*id].pos)
             .to_vec();
+
+        points.sort_unstable();
 
         for &id in to_visit.iter() {
             self.nodes.insert(id);
@@ -195,11 +209,11 @@ impl Chunk {
             let remaining = &points[(i + 1)..];
             let paths = self.find_paths(point, remaining, &mut get_cost, neighborhood);
             for (other_pos, path) in paths {
-                let other_id = all_nodes
-                    .id_at(other_pos)
-                    .expect("Internal Error #5 in Chunk. Please report this");
-
-                all_nodes.add_edge(id, other_id, PathSegment::new(path, config.cache_paths));
+                // let other_id = all_nodes
+                //     .id_at(other_pos)
+                //     .expect("Internal Error #5 in Chunk. Please report this");
+                path_storage.insert(path);
+                // all_nodes.add_edge(id, other_id, PathSegment::new(path, config.cache_paths));
             }
         }
     }
@@ -211,7 +225,8 @@ impl Chunk {
         neighborhood: &N,
         all_nodes: &NodeList,
         cache_paths: bool,
-    ) -> Vec<(NodeID, NodeID, PathSegment)> {
+        // ) -> Vec<(NodeID, NodeID, PathSegment)> {
+    ) -> Vec<(NodeID, NodeID, Path<Point>)> {
         use rayon::prelude::*;
 
         let mut ids = Vec::with_capacity(self.nodes.len());
@@ -233,7 +248,8 @@ impl Chunk {
                             .id_at(other_pos)
                             .expect("Internal Error #5 in Chunk. Please report this");
 
-                        (id, other_id, PathSegment::new(path, cache_paths))
+                        // (id, other_id, PathSegment::new(path, cache_paths))
+                        (id, other_id, path)
                     })
             })
             .collect()

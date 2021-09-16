@@ -4,6 +4,22 @@ use crate::{neighbors::Neighborhood, Point, PointMap, PointSet};
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 
+// a Macro to log::trace the time since $timer, and restart $timer
+#[cfg(feature = "log")]
+macro_rules! re_trace {
+    ($msg: literal, $timer: ident) => {
+        let now = std::time::Instant::now();
+        log::trace!(concat!("time to ", $msg, ": {:?}"), now - $timer);
+        #[allow(unused)]
+        let $timer = now;
+    };
+}
+#[cfg(not(feature = "log"))]
+macro_rules! re_trace {
+    // does nothing without log feature
+    ($msg: literal, $timer: ident) => {};
+}
+
 pub fn dijkstra_search<N: Neighborhood>(
     neighborhood: &N,
     mut valid: impl FnMut(Point) -> bool,
@@ -13,11 +29,16 @@ pub fn dijkstra_search<N: Neighborhood>(
     only_closest_goal: bool,
     size_hint: usize,
 ) -> PointMap<Path<Point>> {
+    // #[cfg(feature = "log")]
+    // let (outer_timer, timer) = (std::time::Instant::now(), std::time::Instant::now());
+
     if get_cost(start) < 0 {
         return PointMap::default();
     }
     let mut visited = PointMap::with_capacity(size_hint);
     let mut next = BinaryHeap::with_capacity(size_hint / 2);
+    // let mut next = PriorityQueue::with_capacity(size_hint / 2);
+
     next.push(Element(start, 0));
     visited.insert(start, (0, start));
 
@@ -26,6 +47,8 @@ pub fn dijkstra_search<N: Neighborhood>(
     let mut goal_costs = PointMap::with_capacity(goals.len());
 
     let mut all_neighbors = vec![];
+
+    // re_trace!("dijkstra setup", timer);
 
     while let Some(Element(current_id, current_cost)) = next.pop() {
         match current_cost.cmp(&visited[&current_id].0) {
@@ -75,6 +98,8 @@ pub fn dijkstra_search<N: Neighborhood>(
         }
     }
 
+    // re_trace!("dijkstra 1st loop", timer);
+
     let mut goal_data = PointMap::with_capacity_and_hasher(goal_costs.len(), Default::default());
 
     for (&goal, &cost) in goal_costs.iter() {
@@ -93,6 +118,10 @@ pub fn dijkstra_search<N: Neighborhood>(
         };
         goal_data.insert(goal, Path::new(steps, cost));
     }
+
+    // re_trace!("dijkstra 2nd loop", timer);
+
+    // re_trace!("dijkstra total", outer_timer);
 
     goal_data
 }
