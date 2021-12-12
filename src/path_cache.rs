@@ -95,7 +95,7 @@ impl<N: Neighborhood + Sync> PathCache<N> {
     ///     PathCacheConfig::with_chunk_size(3), // config
     /// );
     /// ```
-    pub fn new<F: Sync + Fn(Point) -> isize>(
+    pub fn new<'a, F: Sync + Fn(Point) -> isize>(
         (width, height): (usize, usize),
         get_cost: F,
         neighborhood: N,
@@ -126,7 +126,7 @@ impl<N: Neighborhood + Sync> PathCache<N> {
     /// Equivalent to `new` if `parallel` feature is disabled.
     ///
     /// Note that this is _**way**_ slower than `new` with `parallel`.
-    pub fn new_with_fn_mut<F: FnMut(Point) -> isize>(
+    pub fn new_with_fn_mut<'a, F: FnMut(Point) -> isize>(
         (width, height): (usize, usize),
         get_cost: F,
         neighborhood: N,
@@ -145,7 +145,7 @@ impl<N: Neighborhood + Sync> PathCache<N> {
     /// Note that `get_cost` has to be `Fn` instead of `FnMut`.
     #[cfg(feature = "parallel")]
     #[deprecated(since = "0.5.0", note = "`new` is automatically parallel")]
-    pub fn new_parallel<F: Sync + Fn(Point) -> isize>(
+    pub fn new_parallel<'a, F: Sync + Fn(Point) -> isize>(
         (width, height): (usize, usize),
         get_cost: F,
         neighborhood: N,
@@ -299,6 +299,8 @@ impl<N: Neighborhood + Sync> PathCache<N> {
                 // chunks
             }
         };
+
+        re_trace!("fix timer", timer);
 
         let mut cache = PathCache {
             width,

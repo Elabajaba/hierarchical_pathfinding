@@ -1,6 +1,8 @@
 #![allow(unused)]
+use std::io::Write;
+
 use hashbrown::HashMap;
-use slotmap::{DefaultKey, SecondaryMap, SlotMap};
+use slotmap::{DefaultKey, SecondaryMap, SlotMap, SparseSecondaryMap};
 
 use crate::{utils::IterExt, NodeID, Point, PointMap};
 
@@ -11,8 +13,8 @@ use super::{Cost, Path};
 struct PathStorage {
     paths: SlotMap<DefaultKey, Path3>,
     costs: SecondaryMap<DefaultKey, Cost>,
-    starts: SecondaryMap<DefaultKey, Point>,
-    ends: SecondaryMap<DefaultKey, Point>,
+    starts: SparseSecondaryMap<DefaultKey, Point>,
+    ends: SparseSecondaryMap<DefaultKey, Point>,
     start_costs: SecondaryMap<DefaultKey, Cost>,
     end_costs: SecondaryMap<DefaultKey, Cost>,
     // Since a path always only has 2 owners, we don't need to track them here. We track them in the pos_map at a level above here.
@@ -24,29 +26,27 @@ impl PathStorage {
         PathStorage {
             paths: SlotMap::new(),
             costs: SecondaryMap::new(),
-            starts: SecondaryMap::new(),
-            ends: SecondaryMap::new(),
+            starts: SparseSecondaryMap::new(),
+            ends: SparseSecondaryMap::new(),
             start_costs: SecondaryMap::new(),
             end_costs: SecondaryMap::new(),
             // owners: HashMap::new(),
         }
     }
 
-    // fn insert_new_path_with_owners(&mut self, path: Path<Point>, owners: &[NodeID]) -> DefaultKey {
-    //     let key = self.paths.insert(Path3::Path(path.path.to_vec()));
-    //     self.costs.insert(key, path.cost());
-    //     self.starts.insert(key, path[0]);
-    //     self.ends.insert(key, path[path.len() - 1]);
-    //     self.owners.insert(key, owners.to_vec());
-
-    //     key
-    // }
-
     fn insert_new_path(&mut self, path: Path<Point>) -> DefaultKey {
+        // let mut p = path.path.to_vec();
+        // p.shrink_to_fit();
         let key = self.paths.insert(Path3::Path(path.path.to_vec()));
+        match self.paths[key] {
+            Path3::Path(_) => { // do nothing
+            }
+            Path3::CompressedPath(_) => {
+                self.starts.insert(key, path[0]);
+                self.ends.insert(key, path[path.len() - 1]);
+            }
+        }
         self.costs.insert(key, path.cost());
-        self.starts.insert(key, path[0]);
-        self.ends.insert(key, path[path.len() - 1]);
 
         key
     }
@@ -57,33 +57,6 @@ impl PathStorage {
         self.starts.remove(key);
         self.ends.remove(key);
     }
-
-    // fn add_owner(&mut self, key: DefaultKey, new_owners: NodeID) {
-    //     let current_owners = self
-    //         .owners
-    //         .get_mut(&key)
-    //         .expect("Failed to add owner to PathStorage, as the given key does not exist.");
-
-    //     current_owners.push(new_owners);
-    // }
-
-    // fn add_owners(&mut self, key: DefaultKey, new_owners: &[NodeID]) {
-    //     let current_owners = self
-    //         .owners
-    //         .get_mut(&key)
-    //         .expect("Failed to add owner to PathStorage, as the given key does not exist.");
-
-    //     current_owners.extend_from_slice(new_owners);
-    // }
-
-    // fn remove_owners(&mut self, key: DefaultKey, removed_owners: &[NodeID]) {
-    //     let owners = self
-    //         .owners
-    //         .get_mut(&key)
-    //         .expect("Failed to remove owner from PathStorage, as the given key does not exist.");
-
-    //     owners.retain(|id| !removed_owners.contains(id));
-    // }
 
     // TODO: IsReversed isn't necessary here, but it's easier to call this way.
     fn contains_path(&self, key: DefaultKey, path_end: &Point) -> Option<DefaultKey> {
@@ -105,11 +78,17 @@ impl PathStorage {
     }
 
     fn start(&self, key: DefaultKey) -> Point {
-        self.starts[key]
+        match &self.paths[key] {
+            Path3::Path(path) => path[0],
+            Path3::CompressedPath(_) => self.starts[key],
+        }
     }
 
     fn end(&self, key: DefaultKey) -> Point {
-        self.ends[key]
+        match &self.paths[key] {
+            Path3::Path(path) => path[path.len() - 1],
+            Path3::CompressedPath(_) => self.ends[key],
+        }
     }
 
     // In order to reverse a path, need to know the start and end costs.
@@ -124,6 +103,60 @@ impl PathStorage {
         // TODO: Fix this.
         self.cost(key)
         // unimplemented!()
+    }
+
+    fn delete_everything(&mut self) {
+        use std::thread::sleep;
+        use std::time::Duration;
+        println!("dropping end_costs");
+        self.end_costs = SecondaryMap::new();
+        sleep(Duration::new(5, 0));
+        println!("dropping start_costs");
+        self.start_costs = SecondaryMap::new();
+        sleep(Duration::new(5, 0));
+        println!("dropping ends");
+        self.ends = SparseSecondaryMap::new();
+        sleep(Duration::new(5, 0));
+        println!("dropping starts");
+        self.starts = SparseSecondaryMap::new();
+        sleep(Duration::new(5, 0));
+        println!("dropping costs");
+        self.costs = SecondaryMap::new();
+        sleep(Duration::new(5, 0));
+        println!("dropping paths");
+        self.paths = SlotMap::new();
+    }
+
+    fn shrink(&mut self) {
+        // self.paths.
+    }
+
+    fn print_points_in_paths(&self) {
+        println!("capacity: {}", self.paths.capacity());
+        let mut len = 0;
+        let mut printed = false;
+        for path in self.paths.values() {
+            match path {
+                Path3::Path(p) => {
+                    len += p.len();
+                    if !printed {
+                        printed = true;
+                        let cap = p.capacity();
+                        use std::mem::size_of;
+
+                        println!(
+                            "pcap: {}, plen: {}, point size: {}",
+                            cap,
+                            p.len(),
+                            size_of::<Point>(),
+                        );
+                    }
+                }
+                Path3::CompressedPath(_) => todo!(),
+            }
+        }
+
+        println!("length: {}", len);
     }
 }
 
@@ -152,7 +185,7 @@ pub struct PathStorageWrapper {
     pos_map: PointMap<(Vec<(DefaultKey, IsReversed)>)>,
 }
 
-impl PathStorageWrapper {
+impl<'a> PathStorageWrapper {
     pub(crate) fn new() -> Self {
         PathStorageWrapper {
             path_storage: PathStorage::new(),
@@ -160,14 +193,37 @@ impl PathStorageWrapper {
         }
     }
 
+    pub fn temp_print(&self) {
+        self.path_storage.print_points_in_paths();
+    }
+
+    pub fn drop_path_storage(&mut self) {
+        self.path_storage.delete_everything();
+    }
+
+    pub fn drop_pos_map(&mut self) {
+        self.pos_map.clear();
+        self.pos_map.shrink_to_fit();
+    }
+
+    pub fn shrink_paths(&mut self) {
+        self.path_storage.shrink();
+    }
+
     pub fn print_paths(&self) {
+        use std::fs::File;
+
+        let mut file = File::create("new-paths.txt").unwrap();
+
         for (pos, thing) in self.pos_map.iter() {
-            println!("pos: {:?}", pos);
+            // println!("pos: {:?}", pos);
             for (key, is_rev) in thing {
                 let path = self.get_path(*key, *is_rev);
-                println!("{:?}", path);
+                let out = format!("{:?}\n", path);
+                file.write(out.as_bytes());
+                // println!("{:?}", path);
             }
-            println!("");
+            // println!("");
         }
     }
 
@@ -284,8 +340,6 @@ impl PathStorageWrapper {
         let path = if !is_rev {
             self.path_storage.path(key).clone()
         } else {
-            // Harder.
-            // let temp = self.path_storage.path(key);
             self.path_storage.reverse_path(key)
         };
 
@@ -300,8 +354,6 @@ impl PathStorageWrapper {
         let cost = if !is_rev {
             self.path_storage.cost(*key)
         } else {
-            // Harder.
-            // self.path_storage.cost(*key)
             self.path_storage.reverse_cost(*key)
         };
 
@@ -324,11 +376,14 @@ impl PathStorageWrapper {
             .iter()
             .filter(|(k, b)| end_keys.contains(&(*k, !b)))
             .to_vec();
-        if temp.len() == 1 {
-            *temp[0]
-        } else {
-            panic!("get_path failed. Too many keys.");
-        }
+
+        debug_assert_eq!(temp.len(), 1);
+        *temp[0]
+        // if temp.len() == 1 {
+        //     *temp[0]
+        // } else {
+        //     panic!("get_path failed. Too many keys.");
+        // }
     }
 
     pub(crate) fn get_end(&self, key: &DefaultKey, is_rev: bool) -> Point {

@@ -13,6 +13,21 @@ pub struct Chunk {
     pub sides: [bool; 4],
 }
 
+#[cfg(feature = "log")]
+macro_rules! re_trace {
+    ($msg: literal, $timer: ident) => {
+        // let now = std::time::Instant::now();
+        // log::trace!(concat!("time to ", $msg, ": {:?}"), now - $timer);
+        // #[allow(unused)]
+        // let $timer = now;
+    };
+}
+#[cfg(not(feature = "log"))]
+macro_rules! re_trace {
+    // does nothing without log feature
+    ($msg: literal, $timer: ident) => {};
+}
+
 impl Chunk {
     pub fn new<N: Neighborhood>(
         pos: Point,
@@ -24,6 +39,9 @@ impl Chunk {
         config: PathCacheConfig,
         path_storage: &mut PathStorageWrapper,
     ) -> Chunk {
+        // #[cfg(feature = "log")]
+        // let (outer_timer, timer) = (std::time::Instant::now(), std::time::Instant::now());
+
         let mut chunk = Chunk {
             pos,
             size,
@@ -47,10 +65,14 @@ impl Chunk {
             chunk.calculate_side_nodes(dir, total_size, &mut get_cost, config, &mut candidates);
         }
 
+        // re_trace!("first loop", timer);
+
         let nodes = candidates
             .into_iter()
             .map(|p| all_nodes.add_node(p, get_cost(p) as usize))
             .to_vec();
+
+        // re_trace!("create_nodes", timer);
 
         chunk.add_nodes(
             &nodes,
@@ -61,7 +83,9 @@ impl Chunk {
             &config,
         );
 
-        // println!("lengths: {:?}", lens);
+        // re_trace!("add_nodes", timer);
+
+        // re_trace!("chunk new outer", outer_timer);
 
         chunk
     }
@@ -191,6 +215,9 @@ impl Chunk {
         path_storage: &mut PathStorageWrapper,
         config: &PathCacheConfig,
     ) {
+        #[cfg(feature = "log")]
+        let (outer_timer, timer) = (std::time::Instant::now(), std::time::Instant::now());
+
         // first to_visit, then the rest => slicing works the same on both lists
         let mut points = to_visit
             .iter()
@@ -198,11 +225,17 @@ impl Chunk {
             .map(|id| all_nodes[*id].pos)
             .to_vec();
 
+        re_trace!("prep points", timer);
+
         points.sort_unstable();
+
+        re_trace!("sort points", timer);
 
         for &id in to_visit.iter() {
             self.nodes.insert(id);
         }
+
+        re_trace!("to_visit insert", timer);
 
         for (i, &id) in to_visit.iter().enumerate() {
             let point = points[i];
@@ -216,6 +249,9 @@ impl Chunk {
                 // all_nodes.add_edge(id, other_id, PathSegment::new(path, config.cache_paths));
             }
         }
+
+        re_trace!("add_nodes loop", timer);
+        re_trace!("add_nodes outer", outer_timer);
     }
 
     #[cfg(feature = "parallel")]

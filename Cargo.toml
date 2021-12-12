@@ -9,17 +9,12 @@ readme = "readme.md"
 license = "MIT"
 keywords = ["pathfinding", "dijkstra", "a-star", "grid"]
 categories = ["algorithms"]
-exclude = [
-    "/.github/*",
-    "/.vscode/*",
-    "/benches/*",
-    "/img/*",
-    "/.gitignore",
-]
+exclude = ["/.github/*", "/.vscode/*", "/benches/*", "/img/*", "/.gitignore"]
 
 [dependencies]
 hashbrown = "0.11"
 log = { version = "0.4", optional = true }      # Feature used for measuring internal timings. Recommended to leave this off unless working on improvements to hierarchical_pathfinding.
+lz4_flex = { version = "0.8", optional = true }
 rayon = { version = "1.5", optional = true }    # don't set this directly, use feature `parallel` instead.
 slotmap = "1.0"
 
@@ -32,6 +27,7 @@ nanorand = "0.6"
 [features]
 default = ["parallel"]
 parallel = ["rayon", "hashbrown/rayon"]
+compression = ["lz4_flex"]
 
 [[bench]]
 name = "my_benchmark"
